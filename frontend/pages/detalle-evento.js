@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Calendar, MapPin, Ticket, Shield, Share2, Heart, ArrowLeft, Users, Loader2, CheckCircle } from 'lucide-react';
+import { Calendar, MapPin, Ticket, Shield, Share2, Heart, ArrowLeft, Users, Loader2, CheckCircle, Star, MessageSquare } from 'lucide-react';
 
 export default function DetalleEvento() {
   const router = useRouter();
@@ -11,16 +11,34 @@ export default function DetalleEvento() {
   const [buying, setBuying] = useState(false);
   const [purchased, setPurchased] = useState(false);
   const [error, setError] = useState(null);
+  const [user, setUser] = useState(null);
+
+  // Estados para reseñas
+  const [reviewsData, setReviewsData] = useState({ count: 0, average: 0, reviews: [] });
+  const [reviewLoading, setReviewLoading] = useState(true);
+  const [newReview, setNewReview] = useState({ rating: 5, comment: '' });
+  const [sendingReview, setSendingReview] = useState(false);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+  }, []);
 
   useEffect(() => {
     if (!id) return;
 
-    const fetchEvent = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/events/${id}`);
-        if (!response.ok) throw new Error('Evento no encontrado');
-        const data = await response.json();
-        setEvent(data);
+        // Cargar Evento
+        const eventResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/events/${id}`);
+        if (!eventResponse.ok) throw new Error('Evento no encontrado');
+        const eventData = await eventResponse.json();
+        setEvent(eventData);
+
+        // Cargar Reseñas
+        fetchReviews();
       } catch (err) {
         setError(err.message);
       } finally {
@@ -28,8 +46,22 @@ export default function DetalleEvento() {
       }
     };
 
-    fetchEvent();
+    fetchData();
   }, [id]);
+
+  const fetchReviews = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/reviews/event/${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        setReviewsData(data);
+      }
+    } catch (err) {
+      console.error('Error loading reviews:', err);
+    } finally {
+      setReviewLoading(false);
+    }
+  };
 
   const handleBuyTicket = async () => {
     const savedUser = localStorage.getItem('user');
@@ -59,6 +91,39 @@ export default function DetalleEvento() {
       alert(err.message);
     } finally {
       setBuying(false);
+    }
+  };
+
+  const handlePostReview = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    setSendingReview(true);
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          username: user.username,
+          eventId: parseInt(id),
+          rating: newReview.rating,
+          comment: newReview.comment
+        }),
+      });
+
+      if (!response.ok) throw new Error('Error al enviar la reseña');
+      
+      setNewReview({ rating: 5, comment: '' });
+      fetchReviews(); // Recargar reseñas
+      alert('¡Gracias por tu opinión!');
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSendingReview(false);
     }
   };
 
@@ -116,6 +181,13 @@ export default function DetalleEvento() {
               <MapPin className="w-5 h-5 text-primary-400" />
               <span className="font-semibold text-lg">{event.location}</span>
             </div>
+            {reviewsData.count > 0 && (
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-3 py-1 rounded-lg">
+                <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
+                <span className="font-bold text-lg">{reviewsData.average}</span>
+                <span className="text-sm opacity-70">({reviewsData.count} reseñas)</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -153,6 +225,103 @@ export default function DetalleEvento() {
                     <button className="text-sm font-bold text-primary-600 hover:text-primary-700">Ver perfil completo</button>
                  </div>
                </div>
+            </section>
+
+            {/* Sección de Reseñas */}
+            <section className="pt-12 border-t border-slate-200">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+                  <MessageSquare className="w-6 h-6 text-primary-600" />
+                  Reseñas de la comunidad
+                </h2>
+                {reviewsData.count > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star key={s} className={`w-4 h-4 ${s <= Math.round(reviewsData.average) ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300'}`} />
+                      ))}
+                    </div>
+                    <span className="font-bold text-slate-900">{reviewsData.average}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Formulario de Reseña */}
+              {user ? (
+                <form onSubmit={handlePostReview} className="bg-white border border-slate-200 rounded-3xl p-6 mb-10 shadow-sm">
+                  <h4 className="font-bold text-slate-900 mb-4">¿Asististe a este evento? Deja tu opinión</h4>
+                  <div className="flex items-center gap-4 mb-4">
+                    <span className="text-sm font-bold text-slate-500">Tu calificación:</span>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setNewReview({ ...newReview, rating: s })}
+                          className="focus:outline-none transition-transform active:scale-90"
+                        >
+                          <Star className={`w-6 h-6 ${s <= newReview.rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-200 hover:text-yellow-200'}`} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <textarea
+                    value={newReview.comment}
+                    onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })}
+                    placeholder="Cuéntanos qué te pareció el evento..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-slate-600 focus:ring-2 focus:ring-primary-600 focus:bg-white outline-none transition-all mb-4 min-h-[100px]"
+                    required
+                  ></textarea>
+                  <button
+                    type="submit"
+                    disabled={sendingReview}
+                    className="btn-primary py-3 px-8 font-bold flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {sendingReview ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Publicar mi reseña'}
+                  </button>
+                </form>
+              ) : (
+                <div className="bg-slate-50 border border-slate-200 rounded-3xl p-8 text-center mb-10">
+                  <p className="text-slate-600 font-medium mb-4">Inicia sesión para compartir tu experiencia con otros usuarios.</p>
+                  <Link href="/login" className="btn-secondary py-2 px-6 inline-block font-bold">Iniciar Sesión</Link>
+                </div>
+              )}
+
+              {/* Lista de Reseñas */}
+              <div className="space-y-6">
+                {reviewLoading ? (
+                  <div className="flex justify-center py-10">
+                    <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+                  </div>
+                ) : reviewsData.reviews.length > 0 ? (
+                  reviewsData.reviews.map((rev) => (
+                    <div key={rev.id} className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center font-bold text-primary-700">
+                            {rev.username.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <h5 className="font-bold text-slate-900">{rev.username}</h5>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">{new Date(rev.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-0.5">
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star key={s} className={`w-3 h-3 ${s <= rev.rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-200'}`} />
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-slate-600 text-sm leading-relaxed">{rev.comment}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-10 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                    <MessageSquare className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                    <p className="text-slate-500 font-medium">Aún no hay reseñas para este evento. ¡Sé el primero en opinar!</p>
+                  </div>
+                )}
+              </div>
             </section>
           </div>
 

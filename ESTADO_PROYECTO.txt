@@ -77,3 +77,8 @@ Si quieres tener eventos de prueba inmediatamente:
 ## 4. NOTAS DE SEGURIDAD
 - El `JWT_SECRET` se encuentra actualmente en el `docker-compose.yml` para fines de desarrollo. En producción, debe moverse a un archivo `.env` protegido.
 - Las contraseñas se guardan siempre hasheadas en la base de datos `user_db`.
+
+##5 ACTUALIZAR DOCKER CON ESTOS COMANDOS
+cd backend
+   2 docker-compose down
+   3 docker-compose up --build -d

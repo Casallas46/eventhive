@@ -32,18 +32,33 @@ export default function TicketPage() {
   const fetchTicket = async (ticketId) => {
     setLoading(true);
     try {
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/tickets/${ticketId}`;
-      console.log('Fetching from:', apiUrl);
+      // Usamos /details/ para ser explícitos y evitar problemas de enrutamiento
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/tickets/details/${ticketId}`;
+      console.log(`[Frontend] Fetching Ticket ID ${ticketId} from ${apiUrl}`);
+      
       const response = await fetch(apiUrl);
+      console.log(`[Frontend] Response Status: ${response.status} (${response.statusText})`);
+      
+      const contentType = response.headers.get("content-type");
+      console.log(`[Frontend] Content-Type: ${contentType}`);
+
       if (!response.ok) {
-        console.error('API response not OK:', response.status);
-        throw new Error('Ticket no encontrado');
+        let errorMsg = 'Error desconocido';
+        if (contentType && contentType.includes("application/json")) {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorMsg;
+        } else {
+          errorMsg = `Error del servidor (${response.status})`;
+        }
+        throw new Error(errorMsg);
       }
+      
       const data = await response.json();
-      console.log('Ticket data received:', data);
+      console.log('[Frontend] Ticket data received:', data);
       setTicket(data);
     } catch (err) {
-      console.error('Error fetching ticket:', err);
+      console.error('[Frontend] Error in fetchTicket:', err.message);
+      setTicket(null);
     } finally {
       setLoading(false);
     }
