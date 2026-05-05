@@ -1,0 +1,324 @@
+version: '3.8'
+
+services:
+  # Base de Datos de Usuarios
+  user-db:
+    image: mysql:8.0
+    container_name: user-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: user_db
+    ports:
+      - "3309:3306"
+    volumes:
+      - user_data:/var/lib/mysql
+
+  # Base de Datos de Eventos
+  events-db:
+    image: mysql:8.0
+    container_name: events-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: events_db
+    ports:
+      - "3307:3306"
+    volumes:
+      - events_data:/var/lib/mysql
+
+  # Base de Datos de Tickets
+  tickets-db:
+    image: mysql:8.0
+    container_name: tickets-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: tickets_db
+    ports:
+      - "3308:3306"
+    volumes:
+      - tickets_data:/var/lib/mysql
+
+  # Base de Datos de Reseñas
+  reviews-db:
+    image: mysql:8.0
+    container_name: reviews-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: reviews_db
+    ports:
+      - "3310:3306"
+    volumes:
+      - reviews_data:/var/lib/mysql
+
+  # Base de Datos de Pagos
+  payment-db:
+    image: mysql:8.0
+    container_name: payment-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: payment_db
+    ports:
+      - "3311:3306"
+    volumes:
+      - payment_data:/var/lib/mysql
+
+  # Administrador de Base de Datos (Web)
+  adminer:
+    image: adminer
+    container_name: adminer
+    restart: always
+    ports:
+      - "8081:8080"
+
+  # Microservicio de Usuarios
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    restart: always
+    environment:
+      DB_HOST: user-db
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: user_db
+      JWT_SECRET: eventhive_secret_key_2026
+      # Credenciales del administrador — se crea automáticamente al arrancar
+      # el user-service si aún no existe (seed idempotente). CAMBIAR en producción.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-ADMIN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admineventhive084@gmail.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ADMIN123}
+    depends_on:
+      - user-db
+    ports:
+      - "5001:5001"
+
+  # Microservicio de Eventos
+  events-service:
+    build: ./events-service
+    container_name: events-service
+    restart: always
+    environment:
+      DB_HOST: events-db
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: events_db
+      JWT_SECRET: eventhive_secret_key_2026
+    depends_on:
+      - events-db
+    ports:
+      - "5002:5002"
+
+  # Microservicio de Tickets
+  ticket-service:
+    build: ./ticket-service
+    container_name: ticket-service
+    restart: always
+    environment:
+      DB_HOST: tickets-db
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: tickets_db
+      EVENTS_SERVICE_URL:       http://events-service:5002
+      NOTIFICATION_SERVICE_URL: http://notification-service:5007
+    depends_on:
+      - tickets-db
+      - events-service
+    ports:
+      - "5003:5003"
+
+  # Microservicio de Reseñas
+  review-service:
+    build: ./review-service
+    container_name: review-service
+    restart: always
+    environment:
+      DB_HOST: reviews-db
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: reviews_db
+    depends_on:
+      - reviews-db
+    ports:
+      - "5004:5004"
+
+  # Microservicio de Pagos
+  payment-service:
+    build: ./payment-service
+    container_name: payment-service
+    restart: always
+    environment:
+      DB_HOST: payment-db
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: payment_db
+    depends_on:
+      - payment-db
+    ports:
+      - "5005:5005"
+
+  # Base de Datos de Notificaciones
+  notifications-db:
+    image: mysql:8.0
+    container_name: notifications-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: notifications_db
+    ports:
+      - "3313:3306"
+    volumes:
+      - notifications_data:/var/lib/mysql
+
+  # Microservicio de Notificaciones
+  notification-service:
+    build: ./notification-service
+    container_name: notification-service
+    restart: always
+    environment:
+      DB_HOST: notifications-db
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: notifications_db
+      JWT_SECRET: eventhive_secret_key_2026
+      EVENTS_SERVICE_URL: http://events-service:5002
+      TICKETS_SERVICE_URL: http://ticket-service:5003
+      USER_SERVICE_URL:    http://user-service:5001
+      # ─── Resend (desactivado — solo funciona con dominio verificado) ─────────
+      # RESEND_API_KEY: ""
+      # FROM_EMAIL:     ""
+      # ─── SMTP con Gmail (activo) ──────────────────────────────────────────
+      # Pon tu correo Gmail y la contraseña de aplicación de 16 caracteres
+      # (sin espacios). Genera la app-password en:
+      # https://myaccount.google.com/apppasswords
+      EMAIL_USER: "admineventhive084@gmail.com"
+      EMAIL_PASS: "hpnpqzgnzbvqfraz"
+      EMAIL_HOST: "smtp.gmail.com"
+      EMAIL_PORT: "587"
+      # ─── Push con Firebase (opcional) ─────────────────────────────────────
+      FIREBASE_SERVER_KEY: ${FIREBASE_SERVER_KEY:-}
+    depends_on:
+      - notifications-db
+      - events-service
+      - ticket-service
+      - user-service
+    ports:
+      - "5007:5007"
+
+  # Base de Datos de Analytics
+  analytics-db:
+    image: mysql:8.0
+    container_name: analytics-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: analytics_db
+    ports:
+      - "3312:3306"
+    volumes:
+      - analytics_data:/var/lib/mysql
+
+  # Microservicio de Analytics
+  analytics-service:
+    build: ./analytics-service
+    container_name: analytics-service
+    restart: always
+    environment:
+      DB_HOST: analytics-db
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: analytics_db
+      JWT_SECRET: eventhive_secret_key_2026
+      EVENTS_SERVICE_URL: http://events-service:5002
+      TICKETS_SERVICE_URL: http://ticket-service:5003
+      REVIEWS_SERVICE_URL: http://review-service:5004
+    depends_on:
+      - analytics-db
+      - events-service
+      - ticket-service
+      - review-service
+    ports:
+      - "5006:5006"
+
+  # ─── Base de Datos del Mobile BFF ─────────────────────────────────────────
+  mobile-bff-db:
+    image: mysql:8.0
+    container_name: mobile-bff-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mobile_bff_db
+    ports:
+      - "3315:3306"
+    volumes:
+      - mobile_bff_data:/var/lib/mysql
+
+  # ─── Mobile BFF (Backend for Frontend) ────────────────────────────────────
+  mobile-bff:
+    build: ./mobile-bff
+    container_name: mobile-bff
+    restart: always
+    environment:
+      PORT: 5008
+      # Base de datos propia (Device, MobilePreference, ApiMetric)
+      DB_HOST: mobile-bff-db
+      DB_USER: root
+      DB_PASS: root
+      DB_NAME: mobile_bff_db
+      # URLs de los demás microservicios
+      USER_SERVICE_URL:         http://user-service:5001
+      EVENTS_SERVICE_URL:       http://events-service:5002
+      TICKETS_SERVICE_URL:      http://ticket-service:5003
+      REVIEWS_SERVICE_URL:      http://review-service:5004
+      PAYMENT_SERVICE_URL:      http://payment-service:5005
+      NOTIFICATION_SERVICE_URL: http://notification-service:5007
+      # URL base de la app web (para generar los links de verificación QR)
+      APP_URL: http://localhost:3000
+    depends_on:
+      - mobile-bff-db
+      - user-service
+      - events-service
+      - ticket-service
+      - review-service
+      - payment-service
+      - notification-service
+    ports:
+      - "5008:5008"
+
+  # API Gateway
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    restart: always
+    environment:
+      USER_SERVICE_URL:         http://user-service:5001
+      EVENTS_SERVICE_URL:       http://events-service:5002
+      TICKETS_SERVICE_URL:      http://ticket-service:5003
+      REVIEWS_SERVICE_URL:      http://review-service:5004
+      PAYMENT_SERVICE_URL:      http://payment-service:5005
+      ANALYTICS_SERVICE_URL:    http://analytics-service:5006
+      NOTIFICATION_SERVICE_URL: http://notification-service:5007
+      MOBILE_BFF_URL:           http://mobile-bff:5008
+    ports:
+      - "8080:8080"
+    depends_on:
+      - user-service
+      - events-service
+      - ticket-service
+      - review-service
+      - payment-service
+      - analytics-service
+      - notification-service
+      - mobile-bff
+
+volumes:
+  user_data:
+  events_data:
+  tickets_data:
+  reviews_data:
+  payment_data:
+  notifications_data:
+  analytics_data:
+  mobile_bff_data:
